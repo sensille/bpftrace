@@ -33,6 +33,9 @@
 #ifdef HAVE_LIBSYSTEMD
 #include <systemd/sd-daemon.h>
 #endif
+extern "C" {
+#include <entize.h>
+}
 
 #include "ast/context.h"
 #include "async_action.h"
@@ -406,6 +409,31 @@ int BPFtrace::run_iter()
   return 0;
 }
 
+int add_ent_mapping(void *_b, int table_type, uint32_t key,
+    const void *value, uint32_t value_size)
+{
+  auto *bytecode_ = static_cast<BpfBytecode *>(_b);
+  std::string name;
+printf("adding ent mapping: table_type=%d key=%u value_size=%u\n",
+      table_type, key, value_size);
+  if (table_type == 1) {
+    name = "ent_offsetmaps";
+  } else if (table_type == 2) {
+    name = "ent_cfts";
+  } else if (table_type == 3) {
+    name = "ent_expressions";
+  } else if (table_type == 4) {
+    name = "ent_mappings";
+  } else {
+    LOG(ERROR) << "Unknown ent table type: " << table_type;
+    return -1;
+  }
+  auto table = bytecode_->getMap(name);
+  auto ret = table.update_elem(&key, value);
+
+  return 0;
+}
+
 int BPFtrace::prerun() const
 {
   uint64_t num_probes = this->num_probes();
@@ -476,6 +504,23 @@ int BPFtrace::run(output::Output &out,
     LOG(ERROR) << e.what();
     return -1;
   }
+
+  if (bytecode_.hasMap("ent_mappings") && pid().has_value()) {
+    auto *ent = ent_init();
+    printf("loading ent\n");
+    auto ret = ent_add_pid(ent, pid().value());
+    if (ret != 0) {
+      LOG(ERROR) << "Failed to add pid to ent";
+      return -1;
+    }
+    ret = ent_build_tables(ent, add_ent_mapping, &bytecode_);
+    if (ret != 0) {
+      LOG(ERROR) << "Failed to add pid to ent";
+      return -1;
+    }
+    ent_free(ent);
+  }
+
 
   async_action::AsyncHandlers handlers(*this, c_definitions, out);
   PerfEventContext ctx(*this, handlers, out);

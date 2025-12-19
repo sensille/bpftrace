@@ -589,8 +589,22 @@ ScopedExpr CodegenLLVM::kstack_ustack(const std::string &ident,
                                                   "get_stack_fail",
                                                   parent);
 
-  Value *stack_size = b_.CreateGetStack(
-      ctx_, is_ustack, stack_trace, stack_type, loc);
+  Value *stack_size;
+  if (is_ustack) {
+    Value *p_stack_size = b_.getInt32(stack_type.limit * sizeof(uint64_t));
+    std::array<llvm::Type *, 3> arg_types = {
+      b_.getPtrTy(), b_.getPtrTy(), b_.getInt32Ty()
+    };
+    std::array<llvm::Value *, 3> arg_values = {
+      ctx_, stack_trace, p_stack_size
+    };
+    stack_size = createExternFuncCall(
+        "__ustack_ent", b_.getInt64Ty(), arg_types, arg_values, loc)
+      .value();
+  } else {
+    stack_size = b_.CreateGetStack(
+        ctx_, is_ustack, stack_trace, stack_type, loc);
+  }
   Value *condition = b_.CreateICmpSGE(stack_size, b_.getInt64(0));
   b_.CreateCondBr(condition, get_stack_success, get_stack_fail);
 

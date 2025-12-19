@@ -10,6 +10,7 @@ set(bpftrace_VERSION_PATCH 0)
 
 include(GNUInstallDirs)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(WARNINGS_AS_ERRORS OFF CACHE BOOL "Build with -Werror")
 set(HARDENED_STDLIB OFF CACHE BOOL "Enable hardened definitions for standard library (for development use only)")
 set(STATIC_LINKING OFF CACHE BOOL "Build bpftrace as a statically linked executable")
@@ -149,6 +150,8 @@ endif()
 
 find_package(LibBlazesym)
 
+find_package(LibEntize)
+
 if(POLICY CMP0075)
   cmake_policy(SET CMP0075 NEW)
 endif()
@@ -224,6 +227,11 @@ endif()
 if(LIBBLAZESYM_FOUND)
   set(BPFTRACE_FLAGS "${BPFTRACE_FLAGS}" HAVE_BLAZESYM)
   include_directories(SYSTEM ${LIBBLAZESYM_INCLUDE_DIRS})
+endif()
+
+if(LIBENTIZE_FOUND)
+  set(BPFTRACE_FLAGS "${BPFTRACE_FLAGS}" HAVE_ENTIZE)
+  include_directories(SYSTEM ${LIBENTIZE_INCLUDE_DIRS})
 endif()
 
 add_subdirectory(src)

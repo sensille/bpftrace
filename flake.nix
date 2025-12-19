@@ -26,9 +26,13 @@
       url = "github:libbpf/blazesym";
       flake = false;
     };
+    entize = {
+      url = "github:sensille/entize/b68a446fa844f497738a4eb8af4243589842a436";
+      flake = false;
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils, nix-appimage, naersk, blazesym, ... }:
+  outputs = { self, nixpkgs, flake-utils, nix-appimage, naersk, blazesym, entize, ... }:
     # This flake only supports 64-bit linux systems.
     # Note bpftrace support aarch32 but for simplicity we'll omit it for now.
     flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ]
@@ -115,6 +119,18 @@
             '';
           };
 
+          # Build entize
+          entize_c = naersk.lib.${system}.buildPackage {
+            root = entize;
+            cargoBuildOptions = x: x ++ [ "-p" "entize-c" ];
+            copyLibs = true;
+            postInstall = ''
+              # Export C headers
+              mkdir -p $out/include
+              cp entize-c/entize.h $out/include/
+            '';
+          };
+
           # Define lambda that returns a derivation for a kernel given kernel version and SHA as input
           mkKernel = kernelVersion: sha256:
             with pkgs;
@@ -156,6 +172,7 @@
                 buildInputs = [
                   bcc
                   blazesym_c
+                  entize_c
                   pkgs.asciidoctor
                   pkgs.cereal
                   pkgs.elfutils

@@ -1434,16 +1434,19 @@ macro username()
 // Note that for these examples to work, bash had to be recompiled with frame pointers.
 macro ustack(mode, limit) {
   import "stdlib/stack/stackid.bpf.c";
+  import "stdlib/stack/ent.bpf.c";
   __builtin_ustack(mode, limit)
 }
 
 macro ustack(mode) {
   import "stdlib/stack/stackid.bpf.c";
+  import "stdlib/stack/ent.bpf.c";
   __builtin_ustack(mode)
 }
 
 macro ustack() {
   import "stdlib/stack/stackid.bpf.c";
+  import "stdlib/stack/ent.bpf.c";
   __builtin_ustack
 }
 

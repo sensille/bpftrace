@@ -33,6 +33,22 @@
         "type": "github"
       }
     },
+    "entize": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1766407989,
+        "narHash": "sha256-TNJmQ4u7bb+s+cv0FvJOQLRsMuTXUrQz9WMR2/5ub5U=",
+        "owner": "sensille",
+        "repo": "entize",
+        "rev": "b68a446fa844f497738a4eb8af4243589842a436",
+        "type": "github"
+      },
+      "original": {
+        "owner": "sensille",
+        "repo": "entize",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -133,6 +149,7 @@
     "root": {
       "inputs": {
         "blazesym": "blazesym",
+        "entize": "entize",
         "flake-utils": "flake-utils",
         "naersk": "naersk",
         "nix-appimage": "nix-appimage",

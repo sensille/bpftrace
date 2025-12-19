@@ -66,6 +66,10 @@ if(LIBBLAZESYM_FOUND)
   target_link_libraries(runtime ${LIBBLAZESYM_LIBRARIES})
 endif()
 
+if(LIBBLAZESYM_FOUND)
+  target_link_libraries(runtime ${LIBENTIZE_LIBRARIES})
+endif()
+
 install(TARGETS bpftrace DESTINATION ${CMAKE_INSTALL_BINDIR})
 target_compile_definitions(bpftrace PRIVATE ${BPFTRACE_FLAGS})
 
