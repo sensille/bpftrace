@@ -1,6 +1,9 @@
 #include <cassert>
 #include <cerrno>
+#include <cstdint>
+#include <elf.h>
 #include <fcntl.h>
+#include <fstream>
 #include <sched.h>
 #include <stdexcept>
 #include <string>
@@ -199,6 +202,64 @@ void ChildProc::resume()
 {
   assert(state_ == State::PTRACE_PAUSE);
   ptrace(PTRACE_DETACH, child_pid_, nullptr, 0);
+}
+
+static uint64_t read_entry_point(pid_t pid)
+{
+  std::string auxv_path = "/proc/" + std::to_string(pid) + "/auxv";
+  std::ifstream auxv(auxv_path, std::ios::binary);
+  if (auxv.fail())
+    throw SYS_ERROR("Failed to open " + auxv_path);
+
+  Elf64_auxv_t entry;
+  while (auxv.read(reinterpret_cast<char*>(&entry), sizeof(entry))) {
+    if (entry.a_type == AT_ENTRY)
+      return entry.a_un.a_val;
+  }
+
+  throw std::runtime_error("AT_ENTRY not found in " + auxv_path);
+}
+
+void ChildProc::run_until_entry()
+{
+#if !defined(__x86_64__)
+  throw std::runtime_error("run_until_entry() only supported on x86_64");
+#endif
+  assert(state_ == State::PTRACE_PAUSE);
+
+  uint64_t entry_point = read_entry_point(child_pid_);
+
+  // Read original instruction at entry point
+  errno = 0;
+  long orig_data = ptrace(PTRACE_PEEKTEXT, child_pid_, entry_point, nullptr);
+  if (errno != 0)
+    throw SYS_ERROR("Failed to read instruction at entry point");
+
+  // Set breakpoint (INT3 = 0xcc)
+  long bp_data = (orig_data & ~0xffL) | 0xcc;
+  if (ptrace(PTRACE_POKETEXT, child_pid_, entry_point, bp_data) == -1)
+    throw SYS_ERROR("Failed to set breakpoint at entry point");
+
+  // Continue until breakpoint
+  if (ptrace(PTRACE_CONT, child_pid_, nullptr, 0) == -1) {
+    ptrace(PTRACE_POKETEXT, child_pid_, entry_point, orig_data);
+    throw SYS_ERROR("Failed to continue child to entry point");
+  }
+
+  int wstatus;
+  if (waitpid(child_pid_, &wstatus, 0) < 0) {
+    ptrace(PTRACE_POKETEXT, child_pid_, entry_point, orig_data);
+    throw SYS_ERROR("Failed to wait for child at entry point");
+  }
+
+  // Restore original instruction
+  if (ptrace(PTRACE_POKETEXT, child_pid_, entry_point, orig_data) == -1) {
+    throw SYS_ERROR("Failed to restore instruction at entry point");
+  }
+
+  if (!WIFSTOPPED(wstatus) || WSTOPSIG(wstatus) != SIGTRAP) {
+    report_status(wstatus);
+  }
 }
 
 void ChildProc::run(bool pause)
