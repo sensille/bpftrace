@@ -99,6 +99,7 @@ enum Options {
   QUIET,
   TEST, // Alias for --mode=test.
   UNSAFE,
+  UNWIND_PID,
   USDT_SEMAPHORE,
   VERBOSE,
   VERIFY_LLVM_IR,
@@ -130,6 +131,8 @@ void usage(std::ostream& out)
   out << "    -l, --list [search|filename]" << std::endl;
   out << "                   list kernel probes or probes in a program" << std::endl;
   out << "    -p, --pid PID  filter actions and enable USDT probes on PID" << std::endl;
+  out << "    -P, --unwind-pid PID" << std::endl;
+  out << "                   enable DWARF-unwind for PID. Can be given multiple times" << std::endl;
   out << "    -c, --cmd CMD  run CMD and enable USDT probes on resulting process" << std::endl;
   out << "    --no-feature FEATURE[,FEATURE]" << std::endl;
   out << "                   disable use of detected features" << std::endl;
@@ -316,6 +319,7 @@ std::vector<std::string> extra_flags(
 
 struct Args {
   std::string pid_str;
+  std::vector<std::string> unwind_pids_str;
   std::string cmd_str;
   bool listing = false;
   bool safe_mode = true;
@@ -396,7 +400,7 @@ Args parse_args(int argc, char* argv[])
 {
   Args args;
 
-  const char* const short_options = "d:bB:f:e:hlp:vqc:Vo:I:k";
+  const char* const short_options = "d:bB:f:e:hlp:P:vqc:Vo:I:k";
   option long_options[] = {
     option{ .name = "aot",
             .has_arg = required_argument,
@@ -482,6 +486,10 @@ Args parse_args(int argc, char* argv[])
             .has_arg = no_argument,
             .flag = nullptr,
             .val = Options::UNSAFE },
+    option{ .name = "unwind-pid",
+            .has_arg = required_argument,
+            .flag = nullptr,
+            .val = Options::UNWIND_PID },
     option{ .name = "usdt-file-activation",
             .has_arg = no_argument,
             .flag = nullptr,
@@ -625,6 +633,10 @@ Args parse_args(int argc, char* argv[])
       case Options::PID:
         args.pid_str = optarg;
         break;
+      case 'P':
+      case Options::UNWIND_PID:
+        args.unwind_pids_str.emplace_back(optarg);
+        break;
       case 'I':
         args.include_dirs.emplace_back(optarg);
         break;
@@ -762,6 +774,25 @@ bool is_colorize()
   }
 }
 
+uint64_t parse_pid(std::string const &pid_str)
+{
+    auto maybe_pid = util::to_uint(pid_str);
+    if (!maybe_pid) {
+      LOG(ERROR) << "Failed to parse pid: " << maybe_pid.takeError();
+      exit(1);
+    }
+    if (*maybe_pid > 0x400000) {
+      // The actual maximum pid depends on the configuration for the specific
+      // system, i.e. read from `/proc/sys/kernel/pid_max`. We can impose a
+      // basic sanity check here against the nominal maximum for 64-bit
+      // systems.
+      LOG(ERROR) << "Pid out of range: " << *maybe_pid;
+      exit(1);
+    }
+
+    return *maybe_pid;
+}
+
 int main(int argc, char* argv[])
 {
   Log::get().set_colorize(is_colorize());
@@ -804,25 +835,18 @@ int main(int argc, char* argv[])
   bpftrace.run_benchmarks_ = args.mode == Mode::BPF_BENCHMARK;
 
   if (!args.pid_str.empty()) {
-    auto maybe_pid = util::to_uint(args.pid_str);
-    if (!maybe_pid) {
-      LOG(ERROR) << "Failed to parse pid: " << maybe_pid.takeError();
-      exit(1);
-    }
-    if (*maybe_pid > 0x400000) {
-      // The actual maximum pid depends on the configuration for the specific
-      // system, i.e. read from `/proc/sys/kernel/pid_max`. We can impose a
-      // basic sanity check here against the nominal maximum for 64-bit
-      // systems.
-      LOG(ERROR) << "Pid out of range: " << *maybe_pid;
-      exit(1);
-    }
+    auto pid = parse_pid(args.pid_str);
     try {
-      bpftrace.procmon_ = std::make_unique<ProcMon>(*maybe_pid);
+      bpftrace.procmon_ = std::make_unique<ProcMon>(pid);
     } catch (const std::exception& e) {
       LOG(ERROR) << e.what();
       exit(1);
     }
+  }
+
+  for (auto const &pid_str : args.unwind_pids_str) {
+    auto pid = parse_pid(pid_str);
+    bpftrace.unwind_pids_.emplace_back(pid);
   }
 
   if (!args.cmd_str.empty()) {
