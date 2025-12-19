@@ -160,7 +160,7 @@ void ResourceAnalyser::visit(Builtin &builtin)
 
   if (builtin.ident == "__builtin_ncpus") {
     resources_.global_vars.add_known(bpftrace::globalvars::NUM_CPUS);
-  } else if (builtin.ident == "ustack" || builtin.ident == "kstack") {
+  } else if (builtin.ident == "__builtin_ustack" || builtin.ident == "kstack") {
     if (exceeds_stack_limit(builtin.builtin_type.GetSize())) {
       resources_.call_stack_buffers++;
       resources_.max_call_stack_size = std::max(resources_.max_call_stack_size,
