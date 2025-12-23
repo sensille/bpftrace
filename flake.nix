@@ -27,7 +27,7 @@
       flake = false;
     };
     entize = {
-      url = "github:sensille/entize/b68a446fa844f497738a4eb8af4243589842a436";
+      url = "github:sensille/entize/4b760e4d611a564bde37b3c1d8c734484fd4ac19";
       flake = false;
     };
   };

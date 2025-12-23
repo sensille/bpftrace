@@ -36,16 +36,17 @@
     "entize": {
       "flake": false,
       "locked": {
-        "lastModified": 1766407989,
-        "narHash": "sha256-TNJmQ4u7bb+s+cv0FvJOQLRsMuTXUrQz9WMR2/5ub5U=",
+        "lastModified": 1766482681,
+        "narHash": "sha256-cNcrbbbZj/BDhJO2F0nd9Ji87zvKuU2fG8iUIlkRe64=",
         "owner": "sensille",
         "repo": "entize",
-        "rev": "b68a446fa844f497738a4eb8af4243589842a436",
+        "rev": "4b760e4d611a564bde37b3c1d8c734484fd4ac19",
         "type": "github"
       },
       "original": {
         "owner": "sensille",
         "repo": "entize",
+        "rev": "4b760e4d611a564bde37b3c1d8c734484fd4ac19",
         "type": "github"
       }
     },

@@ -508,12 +508,7 @@ int BPFtrace::run(output::Output &out,
   if (bytecode_.hasMap("ent_mappings") && pid().has_value()) {
     auto *ent = ent_init();
     printf("loading ent\n");
-    auto ret = ent_add_pid(ent, pid().value());
-    if (ret != 0) {
-      LOG(ERROR) << "Failed to add pid to ent";
-      return -1;
-    }
-    ret = ent_build_tables(ent, add_ent_mapping, &bytecode_);
+    auto ret = ent_add_pid(ent, pid().value(), add_ent_mapping, &bytecode_);
     if (ret != 0) {
       LOG(ERROR) << "Failed to add pid to ent";
       return -1;
