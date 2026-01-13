@@ -10,6 +10,7 @@ set(bpftrace_VERSION_PATCH 0)
 
 include(GNUInstallDirs)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(WARNINGS_AS_ERRORS OFF CACHE BOOL "Build with -Werror")
 set(HARDENED_STDLIB OFF CACHE BOOL "Enable hardened definitions for standard library (for development use only)")
 set(STATIC_LINKING OFF CACHE BOOL "Build bpftrace as a statically linked executable")
