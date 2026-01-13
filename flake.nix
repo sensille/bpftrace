@@ -53,6 +53,9 @@
             cmakeFlags = oldAttrs.cmakeFlags ++ [
               (pkgs.lib.cmakeBool "ENABLE_LLVM_SHARED" true)
             ];
+            # Disable Python import check — bcc Python bindings have issues
+            # with Python 3.13 but we only need the C/C++ libraries.
+            pythonImportsCheck = [];
           });
 
           # gtest-parallel for running tests
