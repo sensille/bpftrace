@@ -12,6 +12,7 @@
 // OPs with one 8 bit argument
 // OPs with one 64 bit argument
 #define EXPR_OP_CONST   0x81
+#define EXPR_OP_PLUS_CONST 0x82
 // OPs with one 8 bit and one 64 bit argument
 #define EXPR_OP_BREG    0xc1
 

@@ -188,6 +188,11 @@ static void convert_expression(const std::vector<uint8_t> &expr_u8,
       case llvm::dwarf::DW_OP_plus:
         append_u8(eout, EXPR_OP_PLUS);
         break;
+      case llvm::dwarf::DW_OP_plus_uconst:
+        v = expr_get_leb(expr_u8, false, i);
+        append_u8(eout, EXPR_OP_PLUS_CONST);
+        append_u64(eout, v);
+        break;
       case llvm::dwarf::DW_OP_addrx:
       case llvm::dwarf::DW_OP_call2:
       case llvm::dwarf::DW_OP_call4:

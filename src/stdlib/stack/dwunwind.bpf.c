@@ -509,10 +509,19 @@ eval_expr(int expression_id, int *error)
       case EXPR_OP_AND:
       case EXPR_OP_SHL:
       case EXPR_OP_GE:
+      case EXPR_OP_PLUS:
         if (sp < 2) {
           LOG(" eval expr: stack underflow in %d", instr);
           goto err;
         }
+        break;
+      case EXPR_OP_DEREF:
+      case EXPR_OP_PLUS_CONST:
+        if (sp < 1) {
+          LOG(" eval expr: stack underflow in %d", instr);
+          goto err;
+        }
+        break;
     }
 
     DBG(" eval expr id %d instr %d op %x sp %d a1 %lx a2 %lx",
@@ -547,6 +556,9 @@ eval_expr(int expression_id, int *error)
       case EXPR_OP_PLUS:
         stack[sp - 2] = stack[sp - 2] + stack[sp - 1];
         --sp;
+        break;
+      case EXPR_OP_PLUS_CONST:
+        stack[sp - 1] = stack[sp - 1] + a1;
         break;
       case EXPR_OP_DEREF: {
           u64 addr = stack[--sp];
