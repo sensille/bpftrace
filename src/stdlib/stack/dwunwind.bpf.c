@@ -510,6 +510,7 @@ eval_expr(int expression_id, int *error)
       case EXPR_OP_SHL:
       case EXPR_OP_GE:
       case EXPR_OP_PLUS:
+      case EXPR_OP_MUL:
         if (sp < 2) {
           LOG(" eval expr: stack underflow in %d", instr);
           goto err;
@@ -555,6 +556,10 @@ eval_expr(int expression_id, int *error)
         break;
       case EXPR_OP_PLUS:
         stack[sp - 2] = stack[sp - 2] + stack[sp - 1];
+        --sp;
+        break;
+      case EXPR_OP_MUL:
+        stack[sp - 2] = stack[sp - 2] * stack[sp - 1];
         --sp;
         break;
       case EXPR_OP_PLUS_CONST:

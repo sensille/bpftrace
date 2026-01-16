@@ -9,6 +9,7 @@
 #define EXPR_OP_GE      0x03
 #define EXPR_OP_SHL     0x04
 #define EXPR_OP_PLUS    0x05
+#define EXPR_OP_MUL     0x06
 // OPs with one 8 bit argument
 // OPs with one 64 bit argument
 #define EXPR_OP_CONST   0x81
