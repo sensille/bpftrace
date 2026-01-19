@@ -616,9 +616,8 @@ DWARFError DWARFUnwind::read_eh_frame(const std::string &filename, uint32_t oid,
   }
 
   if (fdeCount == 0) {
-    LOG(ERROR) << "object " << filename <<
+    LOG(WARNING) << "object " << filename <<
                   " does not contain information for stack walking";
-    return DWARFError::ParseError;
   }
 
   LOG(V1) << "Summary: Found " << fdeCount << " FDEs and "
