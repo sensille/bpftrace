@@ -405,12 +405,18 @@ DWARFError DWARFUnwind::read_eh_frame(const std::string &filename, uint32_t oid,
     return DWARFError::UnsupportedFormat;
 
   auto DICtx = llvm::DWARFContext::create(*Obj);
+  llvm::Expected<const llvm::DWARFDebugFrame *> FrameOrErr = nullptr;
 
-  llvm::Expected<const llvm::DWARFDebugFrame *> FrameOrErr =
-    DICtx->getEHFrame();
+  if (!DICtx->getDWARFObj().getEHFrameSection().Data.empty()) {
+    FrameOrErr = DICtx->getEHFrame();
+  } else {
+    FrameOrErr = DICtx->getDebugFrame();
+  }
+
   if (!FrameOrErr) {
     LOG(ERROR) << "object " << filename << " does not contain a .eh_frame "
-                  "section, can't extract information for stack walking";
+                  "or .debug_frame section, can't extract information for "
+                  "stack walking";
     return DWARFError::ParseError;
   }
 
@@ -591,8 +597,10 @@ DWARFError DWARFUnwind::read_eh_frame(const std::string &filename, uint32_t oid,
         // start may override end
         // start may not override start
         // end overrides nothing
+        // in case an FDE ends with advance_loc(0), we may have duplicate
+        //   entries
         auto r = rows.find(start);
-        if (r != rows.end() && r->second != 0) {
+        if (r != rows.end() && r->second != 0 && r->second != id) {
           LOG(V1) << "Start address " << std::hex << start
                   << " already exists in rows" << std::dec;
           // XXX error out?
