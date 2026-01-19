@@ -23,6 +23,33 @@ const int CFT_ENTRY_SIZE = 228;
 const int MAX_MAPPINGS = 1000;
 const int CHUNK_SIZE = 256 * 1024;
 
+std::ostream& operator<<(std::ostream& os, const DWARFError& err) {
+  switch (err) {
+    case DWARFError::Success:
+      os << "Success";
+      break;
+    case DWARFError::FileNotFound:
+      os << "FileNotFound";
+      break;
+    case DWARFError::ParseError:
+      os << "ParseError";
+      break;
+    case DWARFError::UnsupportedFormat:
+      os << "UnsupportedFormat";
+      break;
+    case DWARFError::InternalError:
+      os << "InternalError";
+      break;
+    case DWARFError::TooManyObjects:
+      os << "TooManyObjects";
+      break;
+    default:
+      os << "UnknownError";
+      break;
+  }
+  return os;
+}
+
 static void append_u8(std::vector<uint8_t> &buf, uint8_t val) {
   if (buf.capacity() < buf.size() + 1)
     throw std::bad_alloc();
@@ -257,14 +284,14 @@ DWARFError DWARFUnwind::add_object_file(const std::string &filename)
 {
   uint32_t out_oid;
 
-  auto ret = add_file_nopush(filename, out_oid);
+  auto ret = add_file_nopush(filename, -1, out_oid);
   push_current_table();
 
   return ret;
 }
 
 DWARFError DWARFUnwind::add_file_nopush(const std::string &filename,
-                                        uint32_t &out_oid)
+                                        int pid, uint32_t &out_oid)
 {
   auto f = files_seen_.find(filename);
   if (f != files_seen_.end()) {
@@ -272,7 +299,7 @@ DWARFError DWARFUnwind::add_file_nopush(const std::string &filename,
     return DWARFError::Success;
   }
 
-  DWARFError err = add_new_file(filename, out_oid);
+  DWARFError err = add_new_file(filename, pid, out_oid);
   if (err != DWARFError::Success) {
     files_seen_[filename] = 0;    // mark as seen but failed
   } else {
@@ -300,7 +327,7 @@ void build_map_offsets(const llvm::object::ELFObjectFile<ELFT> *Obj,
 }
 
 DWARFError DWARFUnwind::add_new_file(const std::string &filename,
-                                     uint32_t &out_oid)
+                                     int pid, uint32_t &out_oid)
 {
   auto oid = next_oid_;
   if (oid == UINT16_MAX) {
@@ -315,11 +342,20 @@ DWARFError DWARFUnwind::add_new_file(const std::string &filename,
   ++next_oid_;
   out_oid = oid;
 
-  LOG(V1) << "Adding file " << filename << " with OID " << oid;
 
-  auto ExpectedBinary = llvm::object::createBinary(filename);
-  if (!ExpectedBinary)
+  std::string fn;
+  if (pid >= 0)
+    fn = "/proc/" + std::to_string(pid) + "/root/" + filename;
+  else
+    fn = filename;
+
+  LOG(V1) << "Adding file " << fn << " with OID " << oid;
+  auto ExpectedBinary = llvm::object::createBinary(fn);
+  if (!ExpectedBinary) {
+    LOG(ERROR) << "Cannot open " << fn <<
+                  " to extract stack walk information";
     return DWARFError::FileNotFound;
+  }
 
   auto *Bin = ExpectedBinary.get().getBinary();
   auto *Obj = llvm::dyn_cast<llvm::object::ObjectFile>(Bin);
@@ -343,7 +379,7 @@ DWARFError DWARFUnwind::add_new_file(const std::string &filename,
       return DWARFError::UnsupportedFormat;
   }
 
-  return read_eh_frame(filename, oid, map_offsets);
+  return read_eh_frame(fn, oid, map_offsets);
 }
 
 void DWARFUnwind::push_current_table()
@@ -372,8 +408,11 @@ DWARFError DWARFUnwind::read_eh_frame(const std::string &filename, uint32_t oid,
 
   llvm::Expected<const llvm::DWARFDebugFrame *> FrameOrErr =
     DICtx->getEHFrame();
-  if (!FrameOrErr)
+  if (!FrameOrErr) {
+    LOG(ERROR) << "object " << filename << " does not contain a .eh_frame "
+                  "section, can't extract information for stack walking";
     return DWARFError::ParseError;
+  }
 
   const llvm::DWARFDebugFrame *Frame = *FrameOrErr;
   int fdeCount = 0;
@@ -568,6 +607,12 @@ DWARFError DWARFUnwind::read_eh_frame(const std::string &filename, uint32_t oid,
     }
   }
 
+  if (fdeCount == 0) {
+    LOG(ERROR) << "object " << filename <<
+                  " does not contain information for stack walking";
+    return DWARFError::ParseError;
+  }
+
   LOG(V1) << "Summary: Found " << fdeCount << " FDEs and "
     << rowCount << " rows.";
   LOG(V1) << "expressions: " << expressions_.size() << ", entries: "
@@ -643,8 +688,12 @@ std::vector<ProcessMapEntry> read_process_maps(int pid)
       if (std::getline(iss, path) && !path.empty()) {
         if (!(path[0] == '/'))
           continue;
-        if (path.size() > 10 && path.substr(path.size() - 10) == " (deleted)")
+        if (perms.find("x") == std::string::npos)
           continue;
+        if (path.size() > 10 && path.substr(path.size() - 10) == " (deleted)") {
+          LOG(ERROR) << "object not available: " << path;
+          continue;
+        }
         maps.emplace_back(ProcessMapEntry{
           .vm_start = start,
           .vm_end = end,
@@ -668,10 +717,10 @@ DWARFError DWARFUnwind::add_pid(pid_t pid)
 
   for (const auto &map : maps) {
     uint32_t oid;
-    auto err = add_file_nopush(map.file_path, oid);
+    auto err = add_file_nopush(map.file_path, pid, oid);
     if (err != DWARFError::Success) {
       LOG(V1) << "File " << map.file_path << " not added: Error " << err;
-      continue;
+      return err;
     }
     auto e = table_mappings_.find(oid);
     if (e == table_mappings_.end()) {

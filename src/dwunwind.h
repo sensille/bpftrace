@@ -16,32 +16,7 @@ enum class DWARFError {
   InternalError,
   TooManyObjects,
 };
-static std::ostream& operator<<(std::ostream& os, const DWARFError& err) {
-  switch (err) {
-    case DWARFError::Success:
-      os << "Success";
-      break;
-    case DWARFError::FileNotFound:
-      os << "FileNotFound";
-      break;
-    case DWARFError::ParseError:
-      os << "ParseError";
-      break;
-    case DWARFError::UnsupportedFormat:
-      os << "UnsupportedFormat";
-      break;
-    case DWARFError::InternalError:
-      os << "InternalError";
-      break;
-    case DWARFError::TooManyObjects:
-      os << "TooManyObjects";
-      break;
-    default:
-      os << "UnknownError";
-      break;
-  }
-  return os;
-}
+std::ostream& operator<<(std::ostream& os, const DWARFError& err);
 
 struct TableMapping {
   uint64_t file_offset;
@@ -70,8 +45,10 @@ class DWARFUnwind {
 
   private:
     uint32_t add_expression(llvm::DWARFExpression &expr);
-    DWARFError add_new_file(const std::string &filename, uint32_t &out_oid);
-    DWARFError add_file_nopush(const std::string &filename, uint32_t &out_oid);
+    DWARFError add_new_file(const std::string &filename, int pid,
+                            uint32_t &out_oid);
+    DWARFError add_file_nopush(const std::string &filename, int pid,
+                               uint32_t &out_oid);
     void push_current_table();
     DWARFError read_eh_frame(const std::string &filename, uint32_t oid,
       const std::map<uint64_t, uint64_t> &map_offsets);

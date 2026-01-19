@@ -509,10 +509,8 @@ int BPFtrace::run(output::Output &out,
     });
     for (const auto &pid : unwind_pids_) {
       auto ret = unwind.add_pid(pid);
-      if (ret != DWARFError::Success) {
-        LOG(ERROR) << "Failed to add pid to unwind: " << ret;
+      if (ret != DWARFError::Success)
         return -1;
-      }
     }
   }
 

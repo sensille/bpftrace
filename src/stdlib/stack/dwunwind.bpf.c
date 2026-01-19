@@ -344,8 +344,7 @@ find_cft(u32 offsetmap_id, u64 start_in_map, u64 search_key)
 {
   struct offsetmap *om = bpf_map_lookup_elem(&dwunwind_offsetmaps, &offsetmap_id);
   if (om == NULL) {
-    INFO("offsetmap lookup failed for id %d", offsetmap_id);
-    LOG("offsetmap not found");
+    LOG("offsetmap lookup failed for id %d", offsetmap_id);
     return -1;
   }
   DBG("offsetmap found, id %d, start %d offset %x", offsetmap_id,
@@ -678,8 +677,8 @@ unwind_step(void)
   } else if (cf->cfa.rtype == CFA_RULE_EXPRESSION) {
     int error = 0;
     [[clang::noinline]] cfa = eval_expr(cf->cfa.data.expression_id, &error);
-    INFO("eval_expr cft_id %d ip %lx step %d CFA = %lx error %d", cft_id,
-        regs_o[RIP], s->steps, cfa, error);
+    INFO("eval_expr cft_id %d ip %lx", cft_id, regs_o[RIP]);
+    INFO("step %d CFA = %lx error %d", s->steps, cfa, error);
     if (error != 0)
       return 1;
   } else if (cf->cfa.rtype == CFA_RULE_REG_OFFSET) {
