@@ -736,6 +736,10 @@ unwind_step(void)
     }
   }
 
+  // adjust recovered IP to fall into previous instruction
+  // this is not valid for signal frames, but we don't have this
+  // information yet.
+  regs_n[RIP] -= 1;
 
   // switch reg set
   s->current_reg_set = !s->current_reg_set;
