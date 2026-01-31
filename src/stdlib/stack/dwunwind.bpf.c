@@ -26,6 +26,9 @@
 #define RSP 7
 #define RIP 16
 #define MAX_STACK_FRAMES 512
+#define MAX_UPROBES MAX_STACK_FRAMES
+
+#define XOL_PAGE_SIZE 4096
 
 /*
  * General description of the lookup process:
@@ -115,6 +118,7 @@ struct expression {
 
 struct dwunwind_state {
   u32 tgid;
+  u64 xol_base;
   uint current_reg_set;
   u64 regs_map[2 * NUM_REGISTERS];
   u64 regs_valid[2];
@@ -602,6 +606,29 @@ err:
   return 0;
 }
 
+u64 recover_uretprobe_addr(u64 rsp)
+{
+  struct task_struct *task = bpf_get_current_task_btf();
+  struct uprobe_task *up = BPF_CORE_READ(task, utask);
+  struct return_instance *ri = BPF_CORE_READ(up, return_instances);
+
+  for (int i = 0; i < MAX_UPROBES; ++i) {
+    if (ri == NULL) {
+      LOG("no match upretprobe found");
+      return 0;
+    }
+    u64 stack = BPF_CORE_READ(ri, stack);
+    u64 retaddr = BPF_CORE_READ(ri, orig_ret_vaddr);
+    LOG("uretprobe: rsp %lx stack %lx retaddr %lx", rsp, stack, retaddr);
+    if (stack + 8 == rsp) {
+      return retaddr;
+    }
+    ri = BPF_CORE_READ(ri, next);
+  }
+
+  return 0;
+}
+
 int
 unwind_step(void)
 {
@@ -661,7 +688,7 @@ unwind_step(void)
     return 1;
   }
   if (cft_id == 0) {
-    LOG("no offsetmap entry found");
+    LOG("no offsetmap entry found for ip %lx offset %lx", regs_o[RIP], offset);
     return 1;
   }
 
@@ -741,6 +768,14 @@ unwind_step(void)
     }
   }
 
+  if (regs_n[RIP] >= s->xol_base && regs_n[RIP] < s->xol_base + XOL_PAGE_SIZE) {
+    // in xol page, adjust to return address
+    u64 rec;
+    [[clang::noinline]] rec = recover_uretprobe_addr(regs_n[RSP]);
+    if (rec != 0)
+      regs_n[RIP] = rec;
+  }
+
   // adjust recovered IP to fall into previous instruction
   // this is not valid for signal frames, but we don't have this
   // information yet.
@@ -782,6 +817,12 @@ long __ustack_dwunwind(void *ctx, u64 *buf, u32 buf_size)
   }
   u64 stack_top = BPF_CORE_READ(mm, start_stack);
   INFO("start stack: %lx", stack_top);
+
+  /* find uprobes xol page to be able to walk through uretprobes */
+  struct xol_area *xol_area = BPF_CORE_READ(mm, uprobes_state.xol_area);
+  u64 xol_base = BPF_CORE_READ(xol_area, vaddr);
+  INFO("xol base: %lx", xol_base);
+
   /*
    * user mode regs are passed in as ctx. We fetch
    * them anyway, so that it also works when called from
@@ -801,6 +842,7 @@ long __ustack_dwunwind(void *ctx, u64 *buf, u32 buf_size)
     return 1;
   }
   s->tgid = tgid;
+  s->xol_base = xol_base;
 
   // XXX just read all as a block and sort later?
   // XXX not all needed for stack walk without params
