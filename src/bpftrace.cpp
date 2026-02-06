@@ -442,6 +442,18 @@ int BPFtrace::run(output::Output &out,
 
   set_rlimit_nofile(resources.num_probes(), resources.maps_info.size());
 
+  if (!(run_tests_ || run_benchmarks_) && child_ &&
+      (has_usdt_ || dwarf_unwind_)) {
+    try {
+      child_->run(true);
+      if (dwarf_unwind_)
+        child_->run_until_entry();
+    } catch (const std::exception &e) {
+      LOG(ERROR) << "Failed to setup child: " << e.what();
+      return -1;
+    }
+  }
+
   /*
    * Parse all DWARF unwind information here and buffer in RAM, so we
    * know how much space we need in the maps. Once dynamically allocated
@@ -768,15 +780,6 @@ int BPFtrace::run(output::Output &out,
       ++num_signal_attached;
     }
 
-    if (child_ && has_usdt_) {
-      try {
-        child_->run(true);
-      } catch (const std::exception &e) {
-        LOG(ERROR) << "Failed to setup child: " << e.what();
-        return -1;
-      }
-    }
-
     bytecode_.attach_external();
 
     // The kernel appears to fire some probes in the order that they were
@@ -827,7 +830,7 @@ int BPFtrace::run(output::Output &out,
     // Kick the child to execute the command.
     if (child_) {
       try {
-        if (has_usdt_)
+        if (has_usdt_ || dwarf_unwind_)
           child_->resume();
         else
           child_->run();
