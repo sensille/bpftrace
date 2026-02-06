@@ -323,7 +323,7 @@ std::vector<std::string> extra_flags(
 
 struct Args {
   std::string pid_str;
-  std::vector<std::string> unwind_pids_str;
+  std::vector<std::string> dwarf_pids_str;
   std::string cmd_str;
   bool listing = false;
   bool safe_mode = true;
@@ -644,7 +644,7 @@ Args parse_args(int argc, char* argv[])
         break;
       case 'P':
       case Options::DWARF_PID:
-        args.unwind_pids_str.emplace_back(optarg);
+        args.dwarf_pids_str.emplace_back(optarg);
         break;
       case 'u':
       case Options::DWARF_UNWIND:
@@ -857,10 +857,11 @@ int main(int argc, char* argv[])
     }
   }
 
-  for (auto const &pid_str : args.unwind_pids_str) {
+  for (auto const &pid_str : args.dwarf_pids_str) {
     auto pid = parse_pid(pid_str);
-    bpftrace.unwind_pids_.emplace_back(pid);
+    bpftrace.dwarf_pids_.emplace_back(pid);
   }
+  bpftrace.dwarf_unwind_ = args.dwarf_unwind;
 
   if (!args.cmd_str.empty()) {
     bpftrace.cmd_ = args.cmd_str;
@@ -875,11 +876,11 @@ int main(int argc, char* argv[])
   if (args.dwarf_unwind) {
     if (bpftrace.procmon_) {
 printf("Enabling DWARF unwinding (-p) for PID %d\n", bpftrace.procmon_->pid());
-      bpftrace.unwind_pids_.emplace_back(bpftrace.procmon_->pid());
+      bpftrace.dwarf_pids_.emplace_back(bpftrace.procmon_->pid());
     }
     if (bpftrace.child_) {
 printf("Enabling DWARF unwinding (-c) for PID %d\n", bpftrace.child_->pid());
-      bpftrace.unwind_pids_.emplace_back(bpftrace.child_->pid());
+      bpftrace.dwarf_pids_.emplace_back(bpftrace.child_->pid());
     }
   }
 

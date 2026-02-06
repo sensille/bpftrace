@@ -450,7 +450,7 @@ int BPFtrace::run(output::Output &out,
    */
   std::map<TableType, std::vector<std::vector<uint8_t>>> unwind_data;
   std::map<uint32_t, std::vector<uint8_t>> unwind_mappings;
-  if (bytecode_.hasMap("dwunwind_mappings") && !unwind_pids_.empty()) {
+  if (bytecode_.hasMap("dwunwind_mappings") && !dwarf_pids_.empty()) {
     auto unwind = DWARFUnwind([&unwind_data, &unwind_mappings]
       (TableType t, uint32_t k, const std::vector<uint8_t> &v) {
         if (t != TableType::Mappings) {
@@ -472,7 +472,7 @@ int BPFtrace::run(output::Output &out,
         }
         return 0;
     });
-    for (const auto &pid : unwind_pids_) {
+    for (const auto &pid : dwarf_pids_) {
       auto ret = unwind.add_pid(pid);
       if (ret != DWARFError::Success)
         return -1;
@@ -542,7 +542,7 @@ int BPFtrace::run(output::Output &out,
     return -1;
   }
 
-  if (bytecode_.hasMap("dwunwind_mappings") && !unwind_pids_.empty()) {
+  if (bytecode_.hasMap("dwunwind_mappings") && !dwarf_pids_.empty()) {
     // update arrays
     for (auto const &t : unwind_data) {
       std::string name;
