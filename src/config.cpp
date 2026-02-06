@@ -50,6 +50,7 @@ void LicenseError::log(llvm::raw_ostream &OS) const
         "bpf_licensing.html#using-bpf-programs-in-the-linux-kernel";
 }
 
+#ifndef HAVE_BLAZESYM
 // /proc/sys/kernel/randomize_va_space >= 1
 static bool is_aslr_enabled()
 {
@@ -70,11 +71,18 @@ static bool is_aslr_enabled()
 
   return true;
 }
+#endif
 
-Config::Config(bool has_cmd)
+Config::Config([[maybe_unused]] bool has_cmd)
+#ifdef HAVE_BLAZESYM
+    // blazesym's per_program mode uses blaze_symbolize_elf_virt_offsets which
+    // doesn't handle PIE/ASLR correctly, so always use per_pid
+    : user_symbol_cache_type(UserSymbolCacheType::per_pid) {};
+#else
     : user_symbol_cache_type((has_cmd || !is_aslr_enabled())
                                  ? UserSymbolCacheType::per_program
                                  : UserSymbolCacheType::per_pid) {};
+#endif
 
 template <>
 struct ConfigParser<uint64_t> {
