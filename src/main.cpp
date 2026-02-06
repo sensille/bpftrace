@@ -84,6 +84,8 @@ enum Options {
   CMD,
   DEBUG,
   DRY_RUN,
+  DWARF_PID,
+  DWARF_UNWIND,
   EMIT_ELF,
   EMIT_LLVM,
   FMT, // Alias for --mode=format.
@@ -99,7 +101,6 @@ enum Options {
   QUIET,
   TEST, // Alias for --mode=test.
   UNSAFE,
-  UNWIND_PID,
   USDT_SEMAPHORE,
   VERBOSE,
   VERIFY_LLVM_IR,
@@ -131,8 +132,11 @@ void usage(std::ostream& out)
   out << "    -l, --list [search|filename]" << std::endl;
   out << "                   list kernel probes or probes in a program" << std::endl;
   out << "    -p, --pid PID  filter actions and enable USDT probes on PID" << std::endl;
-  out << "    -P, --unwind-pid PID" << std::endl;
-  out << "                   enable DWARF-unwind for PID. Can be given multiple times" << std::endl;
+  out << "    -u, --dwarf-unwind" << std::endl;
+  out << "                   enable DWARF stack unwinding instead of frame basedwalking" << std::endl;
+  out << "                   for the process specified by -p or -c" << std::endl;
+  out << "    -P, --dwarf-pid PID" << std::endl;
+  out << "                   add additional pids to the DWARF-unwinder." << std::endl;
   out << "    -c, --cmd CMD  run CMD and enable USDT probes on resulting process" << std::endl;
   out << "    --no-feature FEATURE[,FEATURE]" << std::endl;
   out << "                   disable use of detected features" << std::endl;
@@ -324,6 +328,7 @@ struct Args {
   bool listing = false;
   bool safe_mode = true;
   bool usdt_file_activation = false;
+  bool dwarf_unwind = false;
   int warning_level = 1;
   bool verify_llvm_ir = false;
   Mode mode = Mode::NONE;
@@ -400,7 +405,7 @@ Args parse_args(int argc, char* argv[])
 {
   Args args;
 
-  const char* const short_options = "d:bB:f:e:hlp:P:vqc:Vo:I:k";
+  const char* const short_options = "d:bB:f:e:hlp:P:uvqc:Vo:I:k";
   option long_options[] = {
     option{ .name = "aot",
             .has_arg = required_argument,
@@ -426,6 +431,10 @@ Args parse_args(int argc, char* argv[])
             .has_arg = no_argument,
             .flag = nullptr,
             .val = Options::DRY_RUN },
+    option{ .name = "dwarf-unwind",
+            .has_arg = no_argument,
+            .flag = nullptr,
+            .val = Options::DWARF_UNWIND },
     option{ .name = "emit-elf",
             .has_arg = required_argument,
             .flag = nullptr,
@@ -486,10 +495,10 @@ Args parse_args(int argc, char* argv[])
             .has_arg = no_argument,
             .flag = nullptr,
             .val = Options::UNSAFE },
-    option{ .name = "unwind-pid",
+    option{ .name = "dwarf-pid",
             .has_arg = required_argument,
             .flag = nullptr,
-            .val = Options::UNWIND_PID },
+            .val = Options::DWARF_PID },
     option{ .name = "usdt-file-activation",
             .has_arg = no_argument,
             .flag = nullptr,
@@ -634,8 +643,12 @@ Args parse_args(int argc, char* argv[])
         args.pid_str = optarg;
         break;
       case 'P':
-      case Options::UNWIND_PID:
+      case Options::DWARF_PID:
         args.unwind_pids_str.emplace_back(optarg);
+        break;
+      case 'u':
+      case Options::DWARF_UNWIND:
+        args.dwarf_unwind = true;
         break;
       case 'I':
         args.include_dirs.emplace_back(optarg);
@@ -856,6 +869,17 @@ int main(int argc, char* argv[])
     } catch (const std::runtime_error& e) {
       LOG(ERROR) << "Failed to fork child: " << e.what();
       exit(1);
+    }
+  }
+
+  if (args.dwarf_unwind) {
+    if (bpftrace.procmon_) {
+printf("Enabling DWARF unwinding (-p) for PID %d\n", bpftrace.procmon_->pid());
+      bpftrace.unwind_pids_.emplace_back(bpftrace.procmon_->pid());
+    }
+    if (bpftrace.child_) {
+printf("Enabling DWARF unwinding (-c) for PID %d\n", bpftrace.child_->pid());
+      bpftrace.unwind_pids_.emplace_back(bpftrace.child_->pid());
     }
   }
 
