@@ -42,6 +42,7 @@
 #include "build_info.h"
 #include "child.h"
 #include "config.h"
+#include "dwunwind.h"
 #include "globalvars.h"
 #include "lockdown.h"
 #include "log.h"
@@ -132,11 +133,13 @@ void usage(std::ostream& out)
   out << "    -l, --list [search|filename]" << std::endl;
   out << "                   list kernel probes or probes in a program" << std::endl;
   out << "    -p, --pid PID  filter actions and enable USDT probes on PID" << std::endl;
+#ifdef DWUNWIND
   out << "    -u, --dwarf-unwind" << std::endl;
   out << "                   enable DWARF stack unwinding instead of frame basedwalking" << std::endl;
   out << "                   for the process specified by -p or -c" << std::endl;
   out << "    -P, --dwarf-pid PID" << std::endl;
   out << "                   add additional pids to the DWARF-unwinder." << std::endl;
+#endif
   out << "    -c, --cmd CMD  run CMD and enable USDT probes on resulting process" << std::endl;
   out << "    --no-feature FEATURE[,FEATURE]" << std::endl;
   out << "                   disable use of detected features" << std::endl;
@@ -431,10 +434,12 @@ Args parse_args(int argc, char* argv[])
             .has_arg = no_argument,
             .flag = nullptr,
             .val = Options::DRY_RUN },
+#ifdef DWUNWIND
     option{ .name = "dwarf-unwind",
             .has_arg = no_argument,
             .flag = nullptr,
             .val = Options::DWARF_UNWIND },
+#endif
     option{ .name = "emit-elf",
             .has_arg = required_argument,
             .flag = nullptr,
@@ -642,6 +647,7 @@ Args parse_args(int argc, char* argv[])
       case Options::PID:
         args.pid_str = optarg;
         break;
+#ifdef DWUNWIND
       case 'P':
       case Options::DWARF_PID:
         args.dwarf_pids_str.emplace_back(optarg);
@@ -650,6 +656,7 @@ Args parse_args(int argc, char* argv[])
       case Options::DWARF_UNWIND:
         args.dwarf_unwind = true;
         break;
+#endif
       case 'I':
         args.include_dirs.emplace_back(optarg);
         break;

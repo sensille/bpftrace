@@ -8,6 +8,10 @@
 
 #include "llvm/DebugInfo/DWARF/DWARFDebugFrame.h"
 
+#if defined(__x86_64__) || defined(__amd64__)
+#define DWUNWIND
+#endif
+
 enum class DWARFError {
   Success = 0,
   FileNotFound,
