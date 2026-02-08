@@ -395,6 +395,7 @@ void DWARFUnwind::push_current_table()
 DWARFError DWARFUnwind::read_eh_frame(const std::string &filename, uint32_t oid,
   const std::map<uint64_t, uint64_t> &map_offsets)
 {
+#ifdef DWARF_UNWIND
   auto ExpectedBinary = llvm::object::createBinary(filename);
   if (!ExpectedBinary)
     return DWARFError::FileNotFound;
@@ -651,6 +652,13 @@ DWARFError DWARFUnwind::read_eh_frame(const std::string &filename, uint32_t oid,
   }
 
   return DWARFError::Success;
+#else
+  // avoid unused parameter warnings when DWARF_UNWIND is not defined
+  (void)filename;
+  (void)oid;
+  (void)map_offsets;
+  throw std::runtime_error("DWARF unwind not supported");
+#endif
 }
 
 struct ProcessMapEntry {

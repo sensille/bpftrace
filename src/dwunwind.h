@@ -6,9 +6,10 @@
 #include <string>
 #include <vector>
 
+#include <llvm/Config/llvm-config.h>
 #include "llvm/DebugInfo/DWARF/DWARFDebugFrame.h"
 
-#if defined(__x86_64__) || defined(__amd64__)
+#if (defined(__x86_64__) || defined(__amd64__)) && LLVM_VERSION_MAJOR >= 21
 #define DWUNWIND
 #endif
 
