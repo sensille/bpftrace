@@ -106,7 +106,7 @@
           # Build blazesym
           blazesym_c = naersk.lib.${system}.buildPackage {
             root = blazesym;
-            cargoBuildOptions = x: x ++ [ "-p" "blazesym-c" ];
+            cargoBuildOptions = x: x ++ [ "-p" "blazesym-c" "-F" "blazesym/xz" ];
             copyLibs = true;
             postInstall = ''
               # Export C headers

@@ -64,6 +64,12 @@ public:
   // pause=true
   virtual void resume() = 0;
 
+  // Continue a paused child until it reaches its entry point (after dynamic
+  // linking completes). This ensures all shared libraries are loaded and
+  // /proc/pid/maps is fully populated. Only valid when run() has been called
+  // with pause=true. The child remains paused after this call.
+  virtual void run_until_entry() = 0;
+
 protected:
   pid_t child_pid_ = -1;
   int exit_code_ = -1;
@@ -94,6 +100,7 @@ public:
   void terminate(bool force = false) override;
   bool is_alive() override;
   void resume() override;
+  void run_until_entry() override;
 
 private:
   enum class State {
