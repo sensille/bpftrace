@@ -95,7 +95,7 @@ static std::vector<uint8_t> enc_rel_ptr(uint64_t rel_ptr)
 {
   if (rel_ptr <= 0xcf) {
     return { static_cast<uint8_t>(rel_ptr) };
-  } else if (rel_ptr <= 0x3ffff) {
+  } else if (rel_ptr <= 0x7ffff) {
     return { static_cast<uint8_t>(0xd0 | ((rel_ptr >> 16) & 0x07)),
              static_cast<uint8_t>(rel_ptr & 0xff),
              static_cast<uint8_t>(rel_ptr >> 8) };
@@ -108,7 +108,7 @@ static std::vector<uint8_t> enc_rel_leaf_ptr(uint64_t rel_ptr)
 {
   if (rel_ptr <= 0x1f) {
     return { static_cast<uint8_t>(0xe0 | rel_ptr) };
-  } else if (rel_ptr <= 0x3ffff) {
+  } else if (rel_ptr <= 0x7ffff) {
     return { static_cast<uint8_t>(0xd8 | ((rel_ptr >> 16) & 0x07)),
              static_cast<uint8_t>(rel_ptr & 0xff),
              static_cast<uint8_t>(rel_ptr >> 8) };
@@ -126,7 +126,7 @@ static std::vector<uint8_t> enc_value(uint64_t val)
 {
   if (val <= 0xf6) {
     return { static_cast<uint8_t>(val) };
-  } else if (val <= 0x3ff) {
+  } else if (val <= 0x7ff) {
     return { static_cast<uint8_t>(0xf8 | ((val >> 8) & 0x07)),
              static_cast<uint8_t>(val & 0xff) };
   } else if (val <= 0xffffff) {

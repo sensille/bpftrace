@@ -116,7 +116,7 @@ static uint64_t expr_get_leb(const std::vector<uint8_t> &expr_u8,
   }
   // sign extend
   if (is_signed && (shift < 64) && (byte & 0x40))
-    result |= -(1 << shift);
+    result |= -(1ULL << shift);
   return result;
 }
 
