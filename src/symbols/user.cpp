@@ -3,7 +3,16 @@
 #include <cerrno>
 #include <cstring>
 #include <elf.h>
+#include <fcntl.h>
+#include <gelf.h>
+#include <libelf.h>
+#include <sys/mman.h>
+#include <unistd.h>
+#ifdef HAVE_LIBLZMA
+#include <lzma.h>
+#endif
 
+#include "log.h"
 #include "symbols/elf_parser.h"
 #include "symbols/user.h"
 #include "util/system.h"
@@ -19,6 +28,128 @@ static int add_symbol(const char* symname,
   syms->insert(std::string(symname));
   return 0;
 }
+
+#ifdef HAVE_LIBLZMA
+// Extract symbols from .gnu_debugdata (MiniDebugInfo) if present.
+// This section contains an xz-compressed ELF with a minimal .symtab
+// that holds symbols not in .dynsym. Common on Fedora/RHEL systems.
+static void add_symbols_from_gnu_debugdata(const std::string& path,
+                                           struct bcc_symbol_option& opts,
+                                           std::set<std::string>& syms)
+{
+  int fd = open(path.c_str(), O_RDONLY);
+  if (fd < 0)
+    return;
+
+  if (elf_version(EV_CURRENT) == EV_NONE) {
+    close(fd);
+    return;
+  }
+
+  Elf* elf = elf_begin(fd, ELF_C_READ, nullptr);
+  if (!elf) {
+    close(fd);
+    return;
+  }
+
+  // Find .gnu_debugdata section
+  Elf_Scn* scn = nullptr;
+  GElf_Shdr shdr;
+  size_t shstrndx;
+  bool found = false;
+
+  if (elf_getshdrstrndx(elf, &shstrndx) != 0) {
+    elf_end(elf);
+    close(fd);
+    return;
+  }
+
+  while ((scn = elf_nextscn(elf, scn)) != nullptr) {
+    if (!gelf_getshdr(scn, &shdr))
+      continue;
+    const char* name = elf_strptr(elf, shstrndx, shdr.sh_name);
+    if (name && strcmp(name, ".gnu_debugdata") == 0) {
+      found = true;
+      break;
+    }
+  }
+
+  if (!found) {
+    elf_end(elf);
+    close(fd);
+    return;
+  }
+
+  // Get the compressed section data
+  Elf_Data* data = elf_getdata(scn, nullptr);
+  if (!data || !data->d_buf || data->d_size == 0) {
+    elf_end(elf);
+    close(fd);
+    return;
+  }
+
+  // Decompress with liblzma
+  lzma_stream strm = LZMA_STREAM_INIT;
+  if (lzma_auto_decoder(&strm, UINT64_MAX, 0) != LZMA_OK) {
+    elf_end(elf);
+    close(fd);
+    return;
+  }
+
+  std::vector<uint8_t> decompressed;
+  decompressed.resize(data->d_size * 4); // initial estimate
+
+  strm.next_in = static_cast<const uint8_t*>(data->d_buf);
+  strm.avail_in = data->d_size;
+
+  lzma_ret ret;
+  do {
+    strm.next_out = decompressed.data() + strm.total_out;
+    strm.avail_out = decompressed.size() - strm.total_out;
+
+    ret = lzma_code(&strm, LZMA_FINISH);
+
+    if (ret == LZMA_OK && strm.avail_out == 0) {
+      decompressed.resize(decompressed.size() * 2);
+    }
+  } while (ret == LZMA_OK);
+
+  if (ret != LZMA_STREAM_END) {
+    LOG(V1) << "Failed to decompress .gnu_debugdata in " << path;
+    lzma_end(&strm);
+    elf_end(elf);
+    close(fd);
+    return;
+  }
+
+  size_t decompressed_size = strm.total_out;
+  lzma_end(&strm);
+  elf_end(elf);
+  close(fd);
+
+  // Write decompressed ELF to a memfd so bcc_elf_foreach_sym can read it
+  int memfd = memfd_create("gnu_debugdata", MFD_CLOEXEC);
+  if (memfd < 0)
+    return;
+
+  size_t written = 0;
+  while (written < decompressed_size) {
+    ssize_t n = write(memfd,
+                      decompressed.data() + written,
+                      decompressed_size - written);
+    if (n <= 0) {
+      close(memfd);
+      return;
+    }
+    written += n;
+  }
+
+  // bcc_elf_foreach_sym needs a path, use /proc/self/fd/N
+  std::string memfd_path = "/proc/self/fd/" + std::to_string(memfd);
+  bcc_elf_foreach_sym(memfd_path.c_str(), add_symbol, &opts, &syms);
+  close(memfd);
+}
+#endif // HAVE_LIBLZMA
 
 Result<> UserInfoImpl::read_probes_for_pid(int pid) const
 {
@@ -69,6 +200,13 @@ Result<> UserInfoImpl::read_probes_for_path(const std::string& path) const
   if (err) {
     return make_error<SystemError>("Extract symbols from " + path, err);
   }
+
+#ifdef HAVE_LIBLZMA
+  // Also extract symbols from .gnu_debugdata (MiniDebugInfo) if present.
+  // libbcc doesn't handle this section, so we decompress it ourselves and
+  // let libbcc enumerate the embedded ELF's symbol table.
+  add_symbols_from_gnu_debugdata(path, symbol_option, syms);
+#endif
 
   // Now read all USDT probes.
   auto enumerator = make_usdt_probe_enumerator(path);

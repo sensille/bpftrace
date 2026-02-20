@@ -165,6 +165,7 @@
                   pkgs.libffi
                   pkgs.libopcodes
                   pkgs.libpcap
+                  pkgs.xz
                   pkgs.systemdLibs
                   pkgs."llvmPackages_${toString llvmVersion}".libclang
                   pkgs."llvmPackages_${toString llvmVersion}".llvm
