@@ -84,7 +84,7 @@ public:
   StackMode stack_mode = StackMode::bpftrace;
 
   // Initialized in the constructor.
-  UserSymbolCacheType user_symbol_cache_type;
+  UserSymbolCacheType user_symbol_cache_type = UserSymbolCacheType::none;
 };
 
 // Specific key has been renamed, must be handled by caller. This may be
