@@ -9,6 +9,12 @@
 
 namespace bpftrace::symbols {
 
+// Open the .gnu_debugdata section of `path` as a memfd containing the
+// decompressed embedded ELF. Returns the fd on success (caller must close),
+// or -1 if the section is absent, liblzma is unavailable, or decompression
+// fails.
+int gnu_debugdata_open_memfd(const std::string& path);
+
 using FunctionSet = std::set<std::string>;
 using USDTSet = std::set<usdt_probe_entry>;
 using BinaryUSDTMap = std::map<std::string, USDTSet>;

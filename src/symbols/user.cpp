@@ -29,27 +29,32 @@ static int add_symbol(const char* symname,
   return 0;
 }
 
-#ifdef HAVE_LIBLZMA
-// Extract symbols from .gnu_debugdata (MiniDebugInfo) if present.
-// This section contains an xz-compressed ELF with a minimal .symtab
-// that holds symbols not in .dynsym. Common on Fedora/RHEL systems.
-static void add_symbols_from_gnu_debugdata(const std::string& path,
-                                           struct bcc_symbol_option& opts,
-                                           std::set<std::string>& syms)
+// Open the .gnu_debugdata section of `path` as a memfd containing the
+// decompressed embedded ELF. Returns the fd on success (caller must close),
+// or -1 if the section is absent or decompression fails.
+//
+// .gnu_debugdata (MiniDebugInfo) contains an xz-compressed minimal ELF with
+// a .symtab for symbols not in .dynsym. Common on Fedora/RHEL systems.
+// libbcc does not handle this section, so we decompress it ourselves.
+int gnu_debugdata_open_memfd(const std::string& path)
 {
+#ifndef HAVE_LIBLZMA
+  (void)path;
+  return -1;
+#else
   int fd = open(path.c_str(), O_RDONLY);
   if (fd < 0)
-    return;
+    return -1;
 
   if (elf_version(EV_CURRENT) == EV_NONE) {
     close(fd);
-    return;
+    return -1;
   }
 
   Elf* elf = elf_begin(fd, ELF_C_READ, nullptr);
   if (!elf) {
     close(fd);
-    return;
+    return -1;
   }
 
   // Find .gnu_debugdata section
@@ -61,7 +66,7 @@ static void add_symbols_from_gnu_debugdata(const std::string& path,
   if (elf_getshdrstrndx(elf, &shstrndx) != 0) {
     elf_end(elf);
     close(fd);
-    return;
+    return -1;
   }
 
   while ((scn = elf_nextscn(elf, scn)) != nullptr) {
@@ -77,7 +82,7 @@ static void add_symbols_from_gnu_debugdata(const std::string& path,
   if (!found) {
     elf_end(elf);
     close(fd);
-    return;
+    return -1;
   }
 
   // Get the compressed section data
@@ -85,7 +90,7 @@ static void add_symbols_from_gnu_debugdata(const std::string& path,
   if (!data || !data->d_buf || data->d_size == 0) {
     elf_end(elf);
     close(fd);
-    return;
+    return -1;
   }
 
   // Decompress with liblzma
@@ -93,7 +98,7 @@ static void add_symbols_from_gnu_debugdata(const std::string& path,
   if (lzma_auto_decoder(&strm, UINT64_MAX, 0) != LZMA_OK) {
     elf_end(elf);
     close(fd);
-    return;
+    return -1;
   }
 
   std::vector<uint8_t> decompressed;
@@ -119,7 +124,7 @@ static void add_symbols_from_gnu_debugdata(const std::string& path,
     lzma_end(&strm);
     elf_end(elf);
     close(fd);
-    return;
+    return -1;
   }
 
   size_t decompressed_size = strm.total_out;
@@ -130,7 +135,7 @@ static void add_symbols_from_gnu_debugdata(const std::string& path,
   // Write decompressed ELF to a memfd so bcc_elf_foreach_sym can read it
   int memfd = memfd_create("gnu_debugdata", MFD_CLOEXEC);
   if (memfd < 0)
-    return;
+    return -1;
 
   size_t written = 0;
   while (written < decompressed_size) {
@@ -139,10 +144,23 @@ static void add_symbols_from_gnu_debugdata(const std::string& path,
                       decompressed_size - written);
     if (n <= 0) {
       close(memfd);
-      return;
+      return -1;
     }
     written += n;
   }
+
+  return memfd;
+#endif // HAVE_LIBLZMA
+}
+
+#ifdef HAVE_LIBLZMA
+static void add_symbols_from_gnu_debugdata(const std::string& path,
+                                           struct bcc_symbol_option& opts,
+                                           std::set<std::string>& syms)
+{
+  int memfd = gnu_debugdata_open_memfd(path);
+  if (memfd < 0)
+    return;
 
   // bcc_elf_foreach_sym needs a path, use /proc/self/fd/N
   std::string memfd_path = "/proc/self/fd/" + std::to_string(memfd);

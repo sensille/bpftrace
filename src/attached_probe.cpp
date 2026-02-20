@@ -25,6 +25,7 @@
 #include "disasm.h"
 #include "log.h"
 #include "symbols/kernel.h"
+#include "symbols/user.h"
 #include "util/bpf_names.h"
 #include "util/cpus.h"
 #include "util/exceptions.h"
@@ -186,6 +187,22 @@ Result<uint64_t> resolve_offset_kprobe(Probe &probe)
   return offset;
 }
 
+struct addr_offset {
+  uint64_t addr;
+  uint64_t offset;
+};
+
+static int addr_offset_load_cb(uint64_t v_addr,
+                                uint64_t mem_sz,
+                                uint64_t file_offset,
+                                void *p)
+{
+  auto *ao = static_cast<struct addr_offset *>(p);
+  if (ao->addr >= v_addr && ao->addr < (v_addr + mem_sz))
+    ao->offset = ao->addr - v_addr + file_offset;
+  return 0;
+}
+
 Result<uint64_t> resolve_offset(Probe &probe)
 {
   bcc_symbol bcc_sym;
@@ -195,17 +212,41 @@ Result<uint64_t> resolve_offset(Probe &probe)
                           probe.loc,
                           0,
                           nullptr,
-                          &bcc_sym)) {
-    return make_error<AttachError>("Could not resolve symbol: " + probe.path +
-                                   ":" + probe.attach_point);
+                          &bcc_sym) == 0) {
+    // Have to free sym.module, see:
+    // https://github.com/iovisor/bcc/blob/ba73657cb8c4dab83dfb89eed4a8b3866255569a/src/cc/bcc_syms.h#L98-L99
+    if (bcc_sym.module)
+      ::free(const_cast<char *>(bcc_sym.module));
+    return bcc_sym.offset;
   }
 
-  // Have to free sym.module, see:
-  // https://github.com/iovisor/bcc/blob/ba73657cb8c4dab83dfb89eed4a8b3866255569a/src/cc/bcc_syms.h#L98-L99
-  if (bcc_sym.module)
-    ::free(const_cast<char *>(bcc_sym.module));
+  // bcc_resolve_symname doesn't handle .gnu_debugdata (MiniDebugInfo).
+  // Fall back: find the symbol's virtual address from the embedded ELF,
+  // then compute the file offset using the original binary's LOAD sections.
+  {
+    int memfd = symbols::gnu_debugdata_open_memfd(probe.path);
+    if (memfd >= 0) {
+      std::string memfd_path = "/proc/self/fd/" + std::to_string(memfd);
+      struct bcc_symbol_option opt = {};
+      opt.use_symbol_type = BCC_SYM_ALL_TYPES ^ (1 << STT_NOTYPE);
+      struct util::symbol sym = {};
+      sym.name = probe.attach_point;
+      bcc_elf_foreach_sym(memfd_path.c_str(), util::sym_name_cb, &opt, &sym);
+      close(memfd);
 
-  return bcc_sym.offset;
+      if (sym.start) {
+        struct addr_offset ao = { .addr = sym.start, .offset = 0 };
+        if (bcc_elf_foreach_load_section(
+                probe.path.c_str(), addr_offset_load_cb, &ao) == 0 &&
+            ao.offset != 0) {
+          return ao.offset;
+        }
+      }
+    }
+  }
+
+  return make_error<AttachError>("Could not resolve symbol: " + probe.path +
+                                 ":" + probe.attach_point);
 }
 
 static constexpr std::string_view hint_unsafe =
@@ -300,6 +341,17 @@ Result<uint64_t> resolve_offset_uprobe(Probe &probe, bool safe_mode)
     bcc_elf_foreach_sym(probe.path.c_str(), util::sym_name_cb, &option, &sym);
 
     if (!sym.start) {
+      // bcc_elf_foreach_sym doesn't handle .gnu_debugdata (MiniDebugInfo).
+      // Try the embedded compressed symbol table as a fallback.
+      int memfd = symbols::gnu_debugdata_open_memfd(probe.path);
+      if (memfd >= 0) {
+        std::string memfd_path = "/proc/self/fd/" + std::to_string(memfd);
+        bcc_elf_foreach_sym(memfd_path.c_str(), util::sym_name_cb, &option, &sym);
+        close(memfd);
+      }
+    }
+
+    if (!sym.start) {
       return make_error<AttachError>("Could not resolve symbol: " + probe.path +
                                      ":" + symbol);
     }
@@ -366,11 +418,6 @@ static int bcc_sym_cb(const char *symname,
   return 0;
 }
 
-struct addr_offset {
-  uint64_t addr;
-  uint64_t offset;
-};
-
 static int bcc_load_cb(uint64_t v_addr,
                        uint64_t mem_sz,
                        uint64_t file_offset,
@@ -423,6 +470,18 @@ Result<std::vector<unsigned long>> resolve_offsets_uprobe_multi(
   if (err) {
     return make_error<AttachError>("Failed to list symbols for probe: " +
                                    probe.name);
+  }
+
+  // Also check .gnu_debugdata (MiniDebugInfo) for symbols not found above.
+  // libbcc doesn't handle this section; decompress it and search the embedded
+  // symbol table for any requested symbols that are still missing.
+  {
+    int memfd = symbols::gnu_debugdata_open_memfd(probe.path);
+    if (memfd >= 0) {
+      std::string memfd_path = "/proc/self/fd/" + std::to_string(memfd);
+      bcc_elf_foreach_sym(memfd_path.c_str(), bcc_sym_cb, &option, &data);
+      close(memfd);
+    }
   }
 
   for (auto a : set) {
