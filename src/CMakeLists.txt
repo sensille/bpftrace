@@ -39,8 +39,12 @@ add_library(runtime STATIC
   types_format.cpp
   ksyms.cpp
   usyms.cpp
+  dwarf/dwunwind.cpp
+  dwarf/dwunwind_loader.cpp
+  dwarf/dwunwind_table.cpp
   ${BFD_DISASM_SRC}
 )
+
 # Ensure flex+bison outputs are built first
 add_dependencies(runtime parser)
 
