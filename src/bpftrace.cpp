@@ -43,6 +43,8 @@
 #include "bpfprogram.h"
 #include "bpftrace.h"
 #include "btf.h"
+#include "dwarf/dwunwind.h"
+#include "dwarf/dwunwind_loader.h"
 #include "log.h"
 #include "output/capture.h"
 #include "output/discard.h"
@@ -431,6 +433,10 @@ int BPFtrace::run(output::Output &out,
                   const ast::CDefinitions &c_definitions,
                   BpfBytecode bytecode)
 {
+  // temporary storage for DWARF unwind data, between parse and feed
+  std::map<TableType, std::vector<std::vector<uint8_t>>> unwind_data;
+  std::map<uint32_t, std::vector<uint8_t>> unwind_mappings;
+
   bytecode_ = std::move(bytecode);
   bytecode_.set_map_ids(resources);
 
@@ -467,6 +473,43 @@ int BPFtrace::run(output::Output &out,
 
   set_rlimit_nofile(resources.num_probes(), resources.maps_info.size());
 
+  // map DWUNWIND_MAPPINGS is only present if dw_unwind() is used.
+  bool needs_dwarf_unwind = bytecode_.hasMap(DWUNWIND_MAPPINGS);
+  if (needs_dwarf_unwind) {
+    if (procmon_)
+      dwarf_pids_.emplace_back(procmon_->pid());
+    if (child_)
+      dwarf_pids_.emplace_back(child_->pid());
+    if (dwarf_pids_.empty()) {
+      LOG(ERROR) << "dw_ustack requires a target process. "
+                    "Use -p, -c, or --dwarf-pid to specify one.";
+      return -1;
+    }
+  }
+
+  if (!(run_tests_ || run_benchmarks_) && child_ &&
+      (has_usdt_ || needs_dwarf_unwind)) {
+    auto result = child_->run(true);
+    if (!result) {
+      LOG(ERROR) << "Failed to setup child: " << result.takeError();
+      return -1;
+    }
+    if (needs_dwarf_unwind) {
+      auto ok = child_->run_until_entry();
+      if (!ok) {
+        LOG(ERROR) << "Failed to run child to entry: " << ok.takeError();
+        return -1;
+      }
+    }
+  }
+
+  if (needs_dwarf_unwind) {
+    int ret = parse_dwarf_unwind(
+        bytecode_, dwarf_pids_, unwind_data, unwind_mappings);
+    if (ret)
+      return ret;
+  }
+
   auto ok = bytecode_.load_progs(resources, *btf_, *feature_, *config_);
   if (!ok) {
     auto errs = handleErrors(std::move(ok), [&](const HelperVerifierError &e) {
@@ -497,6 +540,12 @@ int BPFtrace::run(output::Output &out,
       LOG(ERROR) << errs.takeError();
     }
     return -1;
+  }
+
+  if (needs_dwarf_unwind) {
+    int ret = feed_dwarf_unwind(bytecode_, unwind_data, unwind_mappings);
+    if (ret)
+      return ret;
   }
 
   async_action::AsyncHandlers handlers(*this, c_definitions, out);
@@ -691,14 +740,6 @@ int BPFtrace::run(output::Output &out,
       ++num_signal_attached;
     }
 
-    if (child_ && has_usdt_) {
-      auto result = child_->run(true);
-      if (!result) {
-        LOG(ERROR) << "Failed to setup child: " << result.takeError();
-        return -1;
-      }
-    }
-
     bytecode_.attach_external();
 
     // The kernel appears to fire some probes in the order that they were
@@ -748,7 +789,7 @@ int BPFtrace::run(output::Output &out,
 
     // Kick the child to execute the command.
     if (child_) {
-      if (has_usdt_) {
+      if (has_usdt_ || needs_dwarf_unwind) {
         auto result = child_->resume();
         if (!result) {
           LOG(ERROR) << "Failed to run child: " << result.takeError();

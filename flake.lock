@@ -3,15 +3,16 @@
     "blazesym": {
       "flake": false,
       "locked": {
-        "lastModified": 1772480768,
-        "narHash": "sha256-2yek4Ha+RnZFRZCqjtrRw5eD7LD2Qz/8ikvHlmJK15A=",
-        "owner": "libbpf",
+        "lastModified": 1775566556,
+        "narHash": "sha256-nOU6o35xY4SrSh/Lb6IYMg34axdvtSyWzVX5kX7mhqk=",
+        "owner": "sensille",
         "repo": "blazesym",
-        "rev": "7744c9647abddf97e52f795b1e991fc46aa049c5",
+        "rev": "0478fe6c839021b934a3a8e14a82b4e74985bc49",
         "type": "github"
       },
       "original": {
-        "owner": "libbpf",
+        "owner": "sensille",
+        "ref": "symbolizer",
         "repo": "blazesym",
         "type": "github"
       }

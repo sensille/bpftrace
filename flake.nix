@@ -16,7 +16,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     blazesym = {
-      url = "github:libbpf/blazesym";
+      url = "github:sensille/blazesym/symbolizer";
       flake = false;
     };
   };
@@ -53,6 +53,9 @@
             cmakeFlags = oldAttrs.cmakeFlags ++ [
               (pkgs.lib.cmakeBool "ENABLE_LLVM_SHARED" true)
             ];
+            # Disable Python import check — bcc Python bindings have issues
+            # with Python 3.13 but we only need the C/C++ libraries.
+            pythonImportsCheck = [];
           });
 
           # gtest-parallel for running tests
@@ -264,40 +267,70 @@
             bpftrace-llvm19 = mkBpftrace 19;
             bpftrace-llvm18 = mkBpftrace 18;
 
-            # Self-contained static binary with all dependencies
-            appimage = nix-appimage.lib.${system}.mkAppImage {
-              program = pkgs.lib.getExe default;
-              name = "${default.name}.AppImage";
+            # Self-contained static binary with all dependencies.
+            #
+            # We build our own mkAppImage with a patched fuse3 that uses
+            # system paths (/usr/bin/fusermount3, /bin/mount) instead of
+            # /nix/store paths. Without this, the AppImage only works on
+            # machines that have the exact same Nix store.
+            appimage =
+              let
+                pkgsSt = pkgs.pkgsStatic;
 
-              # Exclude the following groups to reduce appimage size:
-              #
-              # *.a: Static archives are not necessary at runtime
-              # *.h: Header files are not necessary at runtime (some ARM headers for clang are large)
-              # *.py, *.pyc, *.whl: bpftrace does not use python at runtime
-              # libLLVM-11.so: Appimage uses the latest llvm we support, so not llvm11
-              #
-              # The basic process to identify large and useless files is to:
-              #
-              # ```
-              # $ nix build .?submodules=1#appimage
-              # $ ./result --appimage-mount
-              # $ cd /tmp/.mount_resultXXXX    # in new terminal
-              # $ fd -S +1m -l
-              # ```
-              # Patterns are wrapped in single quotes because mkAppImage.nix
-              # uses concatStringsSep to build the mksquashfs command, which
-              # causes unquoted multi-word patterns like "... *.a" to be
-              # word-split by bash into separate args, breaking the exclude.
-              squashfsArgs = [
-                "-wildcards" "-e"
-                "'... *.a'"
-                "'... *.h'"
-                "'... *.py'"
-                "'... *.pyc'"
-                "'... *.whl'"
-                "'... libLLVM-11.so'"
-              ];
-            };
+                # Override fuse3 to use system paths for mount helpers
+                fuse3-system = pkgsSt.fuse3.overrideAttrs (old: {
+                  # Point fusermount3 lookup at /usr/bin
+                  env = (old.env or {}) // {
+                    NIX_CFLAGS_COMPILE = ''-DFUSERMOUNT_DIR="/usr/bin"'';
+                  };
+                  # Replace the preConfigure that substitutes /bin/mount
+                  # with nix store paths. We want the original /bin/mount.
+                  preConfigure = ''
+                    substituteInPlace util/mount.fuse.c \
+                      --replace-fail "/bin/sh" "/bin/sh"
+                  '';
+                });
+
+                mkAppImage = pkgs.callPackage "${nix-appimage}/mkAppImage.nix" {
+                  mkappimage-runtime = pkgsSt.callPackage "${nix-appimage}/runtimes/appimage-type2-runtime" {
+                    fuse3 = fuse3-system;
+                  };
+                  mkappimage-apprun = pkgsSt.callPackage "${nix-appimage}/appruns/userns-chroot" {};
+                };
+              in
+              mkAppImage {
+                program = pkgs.lib.getExe default;
+                name = "${default.name}.AppImage";
+
+                # Exclude the following groups to reduce appimage size:
+                #
+                # *.a: Static archives are not necessary at runtime
+                # *.h: Header files are not necessary at runtime (some ARM headers for clang are large)
+                # *.py, *.pyc, *.whl: bpftrace does not use python at runtime
+                # libLLVM-11.so: Appimage uses the latest llvm we support, so not llvm11
+                #
+                # The basic process to identify large and useless files is to:
+                #
+                # ```
+                # $ nix build .?submodules=1#appimage
+                # $ ./result --appimage-mount
+                # $ cd /tmp/.mount_resultXXXX    # in new terminal
+                # $ fd -S +1m -l
+                # ```
+                # Patterns are wrapped in single quotes because mkAppImage.nix
+                # uses concatStringsSep to build the mksquashfs command, which
+                # causes unquoted multi-word patterns like "... *.a" to be
+                # word-split by bash into separate args, breaking the exclude.
+                squashfsArgs = [
+                  "-wildcards" "-e"
+                  "'... *.a'"
+                  "'... *.h'"
+                  "'... *.py'"
+                  "'... *.pyc'"
+                  "'... *.whl'"
+                  "'... libLLVM-11.so'"
+                ];
+              };
 
             # Kernels to run runtime tests against
             kernel-6_14 = mkKernel "6.14.4" "sha256:0gvbw38vmbccvz64b3ljqiwkkgil0hgnlakpdjang038pxsxddmr";

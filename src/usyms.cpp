@@ -10,6 +10,10 @@
 #include "util/symbols.h"
 #include "util/system.h"
 
+#ifdef HAVE_LIBDEBUGINFOD
+#include <unistd.h>
+#endif
+
 namespace {
 #ifdef HAVE_BLAZESYM
 std::string stringify_addr(uint64_t addr, bool perf_mode)
@@ -124,6 +128,10 @@ Usyms::~Usyms()
 #ifdef HAVE_BLAZESYM
   if (symbolizer_)
     blaze_symbolizer_free(symbolizer_);
+#ifdef HAVE_LIBDEBUGINFOD
+  if (debuginfod_client_)
+    debuginfod_end(debuginfod_client_);
+#endif
 #endif
 }
 
@@ -158,7 +166,33 @@ void Usyms::cache_bcc(const std::string &elf_file, std::optional<int> opt_pid)
 }
 
 #ifdef HAVE_BLAZESYM
-struct blaze_symbolizer *Usyms::create_symbolizer() const
+
+#ifdef HAVE_LIBDEBUGINFOD
+static char *debuginfod_dispatch(const char *maps_file,
+                                 [[maybe_unused]] const char *symbolic_path,
+                                 void *ctx)
+{
+  auto *client = static_cast<debuginfod_client *>(ctx);
+
+  size_t len = 0;
+  uint8_t *build_id = blaze_read_elf_build_id(maps_file, &len);
+  if (!build_id)
+    return nullptr;
+
+  char *path = nullptr;
+  int fd = debuginfod_find_debuginfo(client, build_id, len, &path);
+  free(build_id);
+
+  if (fd < 0)
+    return nullptr;
+  close(fd);
+
+  // path was malloc'd by debuginfod — caller (blazesym) will free it
+  return path;
+}
+#endif
+
+struct blaze_symbolizer *Usyms::create_symbolizer()
 {
   blaze_symbolizer_opts opts = {
     .type_size = sizeof(opts),
@@ -166,6 +200,17 @@ struct blaze_symbolizer *Usyms::create_symbolizer() const
     .inlined_fns = config_.show_debug_info,
     .demangle = config_.cpp_demangle,
   };
+
+#ifdef HAVE_LIBDEBUGINFOD
+  if (debuginfod_client_ == nullptr && getenv("DEBUGINFOD_URLS")) {
+    debuginfod_client_ = debuginfod_begin();
+  }
+  if (debuginfod_client_) {
+    opts.process_dispatch_cb = debuginfod_dispatch;
+    opts.process_dispatch_ctx = debuginfod_client_;
+  }
+#endif
+
   return blaze_symbolizer_new_opts(&opts);
 }
 

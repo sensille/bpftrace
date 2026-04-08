@@ -39,8 +39,12 @@ add_library(runtime STATIC
   types_format.cpp
   ksyms.cpp
   usyms.cpp
+  dwarf/dwunwind.cpp
+  dwarf/dwunwind_loader.cpp
+  dwarf/dwunwind_table.cpp
   ${BFD_DISASM_SRC}
 )
+
 # Ensure flex+bison outputs are built first
 add_dependencies(runtime parser)
 
@@ -60,6 +64,10 @@ add_executable(bpftrace
 # TODO: Honor `STATIC_LINKING` properly.
 if(LIBBLAZESYM_FOUND)
   target_link_libraries(runtime ${LIBBLAZESYM_LIBRARIES})
+endif()
+
+if(LIBDEBUGINFOD_FOUND AND LIBBLAZESYM_FOUND)
+  target_link_libraries(runtime ${LIBDEBUGINFOD_LIBRARIES})
 endif()
 
 install(TARGETS bpftrace DESTINATION ${CMAKE_INSTALL_BINDIR})

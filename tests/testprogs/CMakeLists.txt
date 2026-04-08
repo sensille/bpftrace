@@ -23,11 +23,11 @@ function(testprog_compile is_pie)
   foreach(testprog_source ${testprog_sources})
     get_filename_component(testprog_name ${testprog_source} NAME_WE)
     set(extra_cflags "")
-    set(ldflags "-no-pie")
+    set(ldflags "-no-pie -Wl,--build-id=sha1")
     if(is_pie)
       set(testprog_name "${testprog_name}-pie")
       set(extra_cflags "-fpie")
-      set(ldflags "-pie")
+      set(ldflags "-pie -Wl,--build-id=sha1")
     endif()
     add_executable(${testprog_name} ${testprog_source})
     set_target_properties(${testprog_name}
@@ -43,6 +43,12 @@ endfunction()
 # Compile all test programs into PIE and non-PIE ELF executables.
 testprog_compile(FALSE)
 testprog_compile(TRUE)
+
+# uprobe_nofp must be compiled without frame pointers to validate that
+# DWARF-based stack unwinding can produce a full stack trace.
+foreach(prog uprobe_nofp uprobe_nofp-pie)
+  set_target_properties(${prog} PROPERTIES COMPILE_FLAGS "-g -O1 -fomit-frame-pointer -fno-optimize-sibling-calls")
+endforeach()
 
 find_program(GO_EXECUTABLE go)
 if(GO_EXECUTABLE)

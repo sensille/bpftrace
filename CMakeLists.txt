@@ -10,6 +10,7 @@ set(bpftrace_VERSION_PATCH 0)
 
 include(GNUInstallDirs)
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(WARNINGS_AS_ERRORS OFF CACHE BOOL "Build with -Werror")
 set(HARDENED_STDLIB OFF CACHE BOOL "Enable hardened definitions for standard library (for development use only)")
 set(STATIC_LINKING OFF CACHE BOOL "Build bpftrace as a statically linked executable")
@@ -138,6 +139,7 @@ if(ENABLE_SYSTEMD)
 endif()
 
 find_package(LibBlazesym)
+find_package(LibDebuginfod)
 
 if(POLICY CMP0075)
   cmake_policy(SET CMP0075 NEW)
@@ -181,6 +183,12 @@ string(REGEX REPLACE "-rc[0-9]+" "" CLANG_VERSION ${LLVM_PACKAGE_VERSION})
 find_package(Clang ${CLANG_VERSION} REQUIRED)
 include_directories(SYSTEM ${CLANG_INCLUDE_DIRS})
 
+# DWARF-based user-space stack unwinding requires x86_64 and LLVM >= 21
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64" AND
+   LLVM_VERSION_MAJOR GREATER_EQUAL 21)
+  set(HAVE_DW_UNWIND TRUE)
+endif()
+
 # BPFtrace compile definitions
 
 set(BPFTRACE_FLAGS)
@@ -214,6 +222,15 @@ endif()
 if(LIBBLAZESYM_FOUND)
   set(BPFTRACE_FLAGS "${BPFTRACE_FLAGS}" HAVE_BLAZESYM)
   include_directories(SYSTEM ${LIBBLAZESYM_INCLUDE_DIRS})
+endif()
+
+if(LIBDEBUGINFOD_FOUND AND LIBBLAZESYM_FOUND)
+  set(BPFTRACE_FLAGS "${BPFTRACE_FLAGS}" HAVE_LIBDEBUGINFOD)
+  include_directories(SYSTEM ${LIBDEBUGINFOD_INCLUDE_DIRS})
+endif()
+
+if(HAVE_DW_UNWIND)
+  set(BPFTRACE_FLAGS "${BPFTRACE_FLAGS}" HAVE_DW_UNWIND)
 endif()
 
 add_subdirectory(src)
