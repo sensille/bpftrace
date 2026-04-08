@@ -391,6 +391,17 @@ def test():
     )
     results.append(
         test_one(
+            "debuginfod-test.sh",
+            lambda: truthy(RUN_TESTS),
+            lambda: shell(
+                ["./tests/debuginfod-test.sh"],
+                as_root=True,
+                cwd=Path(BUILD_DIR),
+            ),
+        )
+    )
+    results.append(
+        test_one(
             "tools-parsing-test.sh",
             lambda: truthy(RUN_TESTS),
             lambda: shell(

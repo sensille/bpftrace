@@ -156,6 +156,11 @@ add_custom_target(self_test_files ALL DEPENDS ${self_test_files})
 
 
 #
+# Debuginfod test
+#
+configure_file(debuginfod-test.sh debuginfod-test.sh COPYONLY)
+
+#
 # Tools tests
 #
 configure_file(tools-parsing-test.sh tools-parsing-test.sh COPYONLY)
