@@ -5,16 +5,16 @@
       "locked": {
         "lastModified": 1775566556,
         "narHash": "sha256-nOU6o35xY4SrSh/Lb6IYMg34axdvtSyWzVX5kX7mhqk=",
-        "ref": "main",
+        "owner": "sensille",
+        "repo": "blazesym",
         "rev": "0478fe6c839021b934a3a8e14a82b4e74985bc49",
-        "revCount": 2044,
-        "type": "git",
-        "url": "file:///home/arne/src/blazesym"
+        "type": "github"
       },
       "original": {
-        "ref": "main",
-        "type": "git",
-        "url": "file:///home/arne/src/blazesym"
+        "owner": "sensille",
+        "ref": "symbolizer",
+        "repo": "blazesym",
+        "type": "github"
       }
     },
     "fenix": {

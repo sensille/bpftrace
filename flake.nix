@@ -16,7 +16,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     blazesym = {
-      url = "git+file:///home/arne/src/blazesym?ref=main";
+      url = "github:sensille/blazesym/symbolizer";
       flake = false;
     };
   };
