@@ -16,7 +16,7 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     blazesym = {
-      url = "github:libbpf/blazesym";
+      url = "git+file:///home/arne/src/blazesym?ref=main";
       flake = false;
     };
   };

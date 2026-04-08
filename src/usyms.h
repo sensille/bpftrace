@@ -10,6 +10,10 @@
 #include <blazesym.h>
 #endif
 
+#ifdef HAVE_LIBDEBUGINFOD
+#include <elfutils/debuginfod.h>
+#endif
+
 #include "util/symbols.h"
 
 namespace bpftrace {
@@ -52,8 +56,11 @@ private:
 
 #ifdef HAVE_BLAZESYM
   blaze_symbolizer* symbolizer_{ nullptr };
+#ifdef HAVE_LIBDEBUGINFOD
+  debuginfod_client* debuginfod_client_{ nullptr };
+#endif
 
-  blaze_symbolizer* create_symbolizer() const;
+  blaze_symbolizer* create_symbolizer();
   void cache_blazesym(const std::string& elf_file, std::optional<int> opt_pid);
   std::vector<std::string> resolve_blazesym_impl(uint64_t addr,
                                                  int32_t pid,

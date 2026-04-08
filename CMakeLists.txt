@@ -139,6 +139,7 @@ if(ENABLE_SYSTEMD)
 endif()
 
 find_package(LibBlazesym)
+find_package(LibDebuginfod)
 
 if(POLICY CMP0075)
   cmake_policy(SET CMP0075 NEW)
@@ -221,6 +222,11 @@ endif()
 if(LIBBLAZESYM_FOUND)
   set(BPFTRACE_FLAGS "${BPFTRACE_FLAGS}" HAVE_BLAZESYM)
   include_directories(SYSTEM ${LIBBLAZESYM_INCLUDE_DIRS})
+endif()
+
+if(LIBDEBUGINFOD_FOUND AND LIBBLAZESYM_FOUND)
+  set(BPFTRACE_FLAGS "${BPFTRACE_FLAGS}" HAVE_LIBDEBUGINFOD)
+  include_directories(SYSTEM ${LIBDEBUGINFOD_INCLUDE_DIRS})
 endif()
 
 if(HAVE_DW_UNWIND)
