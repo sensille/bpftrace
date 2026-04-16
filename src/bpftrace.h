@@ -65,12 +65,12 @@ enum class DebugStage {
 
 const std::unordered_map<std::string_view, DebugStage> debug_stages = {
   // clang-format off
-  { "parse", DebugStage::Parse },
   { "ast", DebugStage::Ast },
   { "codegen", DebugStage::Codegen },
   { "codegen-opt", DebugStage::CodegenOpt },
 #ifndef NDEBUG
   { "dis", DebugStage::Disassemble },
+  { "parse", DebugStage::Parse },
 #endif
   { "libbpf", DebugStage::Libbpf },
   { "verifier", DebugStage::Verifier },
@@ -213,6 +213,7 @@ public:
   std::unordered_set<std::string> btf_set_;
   std::unique_ptr<util::ChildProc> child_;
   std::unique_ptr<util::Proc> procmon_;
+  std::vector<pid_t> dwarf_pids_;
   std::optional<pid_t> pid() const
   {
     if (procmon_) {

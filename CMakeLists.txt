@@ -102,22 +102,6 @@ include_directories(SYSTEM ${LIBELF_INCLUDE_DIRS})
 find_package(LibCereal REQUIRED)
 include_directories(SYSTEM ${LIBCEREAL_INCLUDE_DIRS})
 
-find_package(BISON REQUIRED)
-find_package(FLEX REQUIRED)
-# `parser_class_name` is deprecated and generates warnings in bison >= 3.3.
-# But `api.parser.class` is not supported in bison < 3.3. So we must inject
-# the %define based on the bison version here.
-if(${BISON_VERSION} VERSION_GREATER_EQUAL 3.3)
-  set(BISON_FLAGS "-Dapi.parser.class={Parser} -Wcounterexamples")
-else()
-  set(BISON_FLAGS "-Dparser_class_name={Parser} -Wcounterexamples")
-endif()
-bison_target(bison_parser src/parser.yy ${CMAKE_BINARY_DIR}/parser.tab.cc COMPILE_FLAGS ${BISON_FLAGS} VERBOSE)
-flex_target(flex_lexer src/lexer.l ${CMAKE_BINARY_DIR}/lex.yy.cc)
-add_flex_bison_dependency(flex_lexer bison_parser)
-add_library(parser STATIC ${BISON_bison_parser_OUTPUTS} ${FLEX_flex_lexer_OUTPUTS})
-target_compile_options(parser PRIVATE "-w")
-target_include_directories(parser PRIVATE src src/ast)
 
 include(CheckSymbolExists)
 set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
@@ -181,6 +165,12 @@ string(REGEX REPLACE "-rc[0-9]+" "" CLANG_VERSION ${LLVM_PACKAGE_VERSION})
 find_package(Clang ${CLANG_VERSION} REQUIRED)
 include_directories(SYSTEM ${CLANG_INCLUDE_DIRS})
 
+# DWARF-based user-space stack unwinding requires x86_64 and LLVM >= 21
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64" AND
+   LLVM_VERSION_MAJOR GREATER_EQUAL 21)
+  set(HAVE_DW_UNWIND TRUE)
+endif()
+
 # BPFtrace compile definitions
 
 set(BPFTRACE_FLAGS)
@@ -214,6 +204,10 @@ endif()
 if(LIBBLAZESYM_FOUND)
   set(BPFTRACE_FLAGS "${BPFTRACE_FLAGS}" HAVE_BLAZESYM)
   include_directories(SYSTEM ${LIBBLAZESYM_INCLUDE_DIRS})
+endif()
+
+if(HAVE_DW_UNWIND)
+  set(BPFTRACE_FLAGS "${BPFTRACE_FLAGS}" HAVE_DW_UNWIND)
 endif()
 
 add_subdirectory(src)

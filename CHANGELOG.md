@@ -10,6 +10,8 @@ and this project adheres to
 
 #### Breaking Changes
 #### Added
+- Add DWARF-based user-space stack unwinding via `dw_ustack()` for x86_64 (requires LLVM >= 21).
+  - [#4964](https://github.com/bpftrace/bpftrace/pull/4964)
 - Extend support for DWARF formats
   - [#5095](https://github.com/bpftrace/bpftrace/pull/5095)
 - Ternary operator supports an empty second operand.
@@ -23,6 +25,8 @@ and this project adheres to
 - Add `is_err` stdlib macro for detecting ERR_PTR return values
   - [#5086](https://github.com/bpftrace/bpftrace/pull/5086)
 #### Changed
+- Improved disambiguation for cast and typeof-style expressions
+  - [#5092](https://github.com/bpftrace/bpftrace/pull/5092)
 #### Deprecated
 #### Removed
 #### Fixed
@@ -31,6 +35,8 @@ and this project adheres to
 #### Security
 #### Docs
 #### Tools
+- naptime.bt: Filter out failed calls and add clock_nanosleep support
+  - [#5117](https://github.com/bpftrace/bpftrace/pull/5117)
 
 ## [0.25.1] 2026-03-25
 

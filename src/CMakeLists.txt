@@ -8,14 +8,12 @@ add_compile_options($<$<BOOL:${BUILD_ASAN}>:-fsanitize=address>)
 add_compile_options($<$<BOOL:${BUILD_UBSAN}>:-fsanitize=undefined>)
 
 add_library(required_resources required_resources.cpp)
-add_dependencies(required_resources parser)
 
 add_library(compiler_core STATIC
   functions.cpp
   struct.cpp
   types.cpp
 )
-add_dependencies(compiler_core parser)
 
 add_library(runtime STATIC
   async_action.cpp
@@ -39,15 +37,16 @@ add_library(runtime STATIC
   types_format.cpp
   ksyms.cpp
   usyms.cpp
+  dwarf/dwunwind.cpp
+  dwarf/dwunwind_loader.cpp
+  dwarf/dwunwind_table.cpp
   ${BFD_DISASM_SRC}
 )
-# Ensure flex+bison outputs are built first
-add_dependencies(runtime parser)
 
 add_library(libbpftrace STATIC
   build_info.cpp
-  driver.cpp
   lockdown.cpp
+  parser.cpp
 )
 # So it's not "liblibbpftrace"
 set_target_properties(libbpftrace PROPERTIES PREFIX "")
@@ -103,7 +102,7 @@ target_link_options(bpftrace BEFORE PRIVATE
 
 target_link_libraries(runtime debugfs output symbols tracefs util)
 target_link_libraries(runtime ${LIBBPF_LIBRARIES} ${ZLIB_LIBRARIES})
-target_link_libraries(libbpftrace parser runtime symbols aot ast arch util cxxdemangler_llvm)
+target_link_libraries(libbpftrace runtime symbols aot ast arch util cxxdemangler_llvm)
 
 if(LIBPCAP_FOUND)
   target_link_libraries(libbpftrace ${LIBPCAP_LIBRARIES})
